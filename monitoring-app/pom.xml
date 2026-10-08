@@ -16,6 +16,26 @@
     <skipITs>true</skipITs>
     <surefire-plugin.version>3.2.5</surefire-plugin.version>
   </properties>
+  <!--
+    The cloudevents-core and cloudevents-kafka dependencies below are Red Hat productised
+    builds (the ".redhat-00001" suffix) and are published only to the Red Hat GA
+    repository, not to Maven Central. Declaring the repository here means a clean clone
+    builds with no host configuration; previously it required a redhat-ga profile in
+    ~/.m2/settings.xml, which was written down nowhere.
+  -->
+  <repositories>
+    <repository>
+      <id>redhat-ga</id>
+      <name>Red Hat GA Repository</name>
+      <url>https://maven.repository.redhat.com/ga/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+  </repositories>
   <dependencyManagement>
     <dependencies>
       <dependency>

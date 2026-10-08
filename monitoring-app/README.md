@@ -100,6 +100,71 @@ have been started.
 > `http://monitoring-app-train.apps.example.com`, which requires a matching
 > `/etc/hosts` entry. Use Safari — Chrome and Brave force an HTTPS redirect and fail.
 
+## Building from source
+
+`./mvnw` works from a clean clone — the wrapper files under `.mvn/wrapper/` are committed.
+With a JDK 17 on the host:
+
+```sh
+./mvnw -B clean package
+```
+
+To keep the toolchain off the host entirely, run the same command in a JDK container with
+the repository bind-mounted:
+
+```sh
+podman run --rm -v "$PWD":/project:z -v "$HOME/.m2":/root/.m2:z -w /project \
+  docker.io/library/eclipse-temurin:17-jdk ./mvnw -B clean package
+```
+
+The `~/.m2` mount is a **cache, not a requirement** — drop it and the build still succeeds,
+it just re-fetches everything each run. No `settings.xml` is needed: the pom declares the
+`redhat-ga` repository itself, which is what the productised artifacts resolve against.
+
+Output lands in `target/`:
+
+```
+target/
+├── monitoring-app-1.0.0-SNAPSHOT.jar    ~22 MB   thin jar — classes and web resources
+└── quarkus-app/                        ~162 MB   the deployable (Quarkus fast-jar layout)
+    ├── quarkus-run.jar                           run this
+    ├── app/                                      application classes
+    ├── lib/                                      dependencies
+    └── quarkus/                                  generated bootstrap
+```
+
+The thin jar is **not** runnable on its own — `quarkus-run.jar` is a manifest pointing at
+its sibling directories, so the whole `target/quarkus-app/` tree travels together:
+
+```sh
+java -jar target/quarkus-app/quarkus-run.jar
+```
+
+Most of that 22 MB is the two duplicate 10.8 MB PNGs described under
+[Known issues](#known-issues); fixing those shrinks the jar and the image with it.
+
+## Building the image
+
+```sh
+./build-image.sh           # build and tag locally
+PUSH=1 ./build-image.sh    # build, tag, and push
+```
+
+**No JDK or Maven is needed on the host.** The script runs `./mvnw` inside
+`eclipse-temurin:17-jdk` to produce `target/quarkus-app/`, then builds the runtime image
+from it.
+
+Note `src/main/docker/Dockerfile.jvm` does *not* compile anything — it starts from
+`ubi8/openjdk-17` and copies `target/quarkus-app/` in, so the packaging step must happen
+first. That is what the JDK container is for, and it is why a stale `target/` would ship
+silently if you built the image by hand.
+
+Overridable: `IMAGE`, `TAG`, `PLATFORM`, `JDK_IMAGE`, `M2_DIR` (defaults to `~/.m2`,
+mounted so dependencies are cached between runs). Pushing is opt-in so that running the
+script cannot publish by accident.
+
+Verified end to end on 2026-10-08: produces a 593 MB `linux/arm64` image.
+
 ## Related Modules
 
 - **Capture-App** — captures frames; receives the commands this app emits.
